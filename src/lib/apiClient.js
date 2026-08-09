@@ -7,6 +7,10 @@ async function getIdToken() {
   if (!import.meta.env.VITE_LIFF_ID) return null;
   liffInit ??= liff.init({ liffId: import.meta.env.VITE_LIFF_ID });
   await liffInit;
+  if (!liff.isInClient() && !liff.isLoggedIn()) {
+    liff.login({ redirectUri: window.location.href });
+    throw new Error("Redirecting to LINE Login…");
+  }
   return liff.getIDToken();
 }
 

@@ -11,6 +11,7 @@ The visual source of truth is in `docs/01-screen.png` through `docs/09-screen.pn
 - Stack: Vite, React 19, `@line/liff`, `lucide-react`.
 - Entry: `src/App.jsx`; styles: `src/App.css`.
 - API client: `src/lib/apiClient.js`.
+- In an external browser, the API client redirects an unauthenticated user through `liff.login()` before requesting an ID token. In the LINE in-app browser, LIFF supplies the token during initialization.
 - The frontend contains **no static nutrition/history records**. Home, History, Capture, Confirm, and onboarding use Edge Function responses or visible loading/error/empty states.
 - Environment values required locally and in Netlify:
 
