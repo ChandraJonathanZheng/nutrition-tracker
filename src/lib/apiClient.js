@@ -1,5 +1,4 @@
 import liff from "@line/liff";
-import heic2any from "heic2any";
 
 const functionsUrl = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL;
 
@@ -31,12 +30,16 @@ async function request(path, options = {}) {
 }
 
 async function normalizeFoodPhoto(file) {
-  const isHeic = file.type === "image/heic" || file.type === "image/heif" || /\.hei[cf]$/i.test(file.name);
-  if (!isHeic) return file;
+  const needsConversion = file.type === "image/heic" || file.type === "image/heif" || /\.hei[cf]$/i.test(file.name);
+  if (!needsConversion) return file;
 
-  const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 });
-  const jpeg = Array.isArray(converted) ? converted[0] : converted;
-  return new File([jpeg], `${file.name.replace(/\.hei[cf]$/i, "") || "food"}.jpg`, { type: "image/jpeg" });
+  try {
+    const { heicTo } = await import("heic-to");
+    const jpeg = await heicTo({ blob: file, type: "image/jpeg", quality: 0.85 });
+    return new File([jpeg], `${file.name.replace(/\.hei[cf]$/i, "") || "food"}.jpg`, { type: "image/jpeg" });
+  } catch {
+    throw new Error("This HEIC photo could not be converted. Take a new photo in JPEG/Most Compatible format, or choose a JPEG, PNG, or WebP image.");
+  }
 }
 
 export const api = {
