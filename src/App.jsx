@@ -1,43 +1,44 @@
-import { useEffect, useState } from "react";
-import liff from "@line/liff";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Camera, Check, ImagePlus, Pencil, Plus, X } from "lucide-react";
+import { api } from "./lib/apiClient";
 import "./App.css";
 
-function App() {
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+const goals = [["Lose Weight", "Calorie deficit", "lose_weight"], ["Maintain Weight", "Balanced calories", "maintain_weight"], ["Gain Weight / Muscle", "Calorie surplus", "gain_weight"]];
+const activities = [["Low", "Rarely exercise", "low"], ["Moderate", "3–4x a week", "moderate"], ["High", "Almost daily", "high"]];
+const n = (v, unit = "") => v == null ? "—" : `${Math.round(Number(v))}${unit}`;
+const toMeal = (m) => ({ ...m, name: m.foodName ?? m.food_name, time: m.time ?? `${new Date(m.loggedAt ?? m.logged_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${m.mealType ?? m.meal_type}`, color: m.color ?? "orange" });
 
-  useEffect(() => {
-    liff
-      .init({
-        liffId: import.meta.env.VITE_LIFF_ID
-      })
-      .then(() => {
-        setMessage("LIFF init succeeded.");
-      })
-      .catch((e) => {
-        setMessage("LIFF init failed.");
-        setError(`${e}`);
-      });
-  });
+function Progress({ value, tone = "orange" }) { return <div className="progress"><i className={tone} style={{ width: `${Math.min(Number(value) || 0, 100)}%` }} /></div>; }
+function Macro({ value, label, tone, progress }) { return <div className="macro"><span>{label}</span><strong className={tone}>{n(value, "g")}</strong>{progress != null && <Progress value={progress} tone={tone}/>}</div>; }
+function Nutrient({ value, label, tone = "" }) { return <div className="small-nutrient"><b className={tone}>{n(value, label === "Sodium" ? "mg" : "g")}</b><span>{label}</span></div>; }
+function MealRow({ meal }) { return <article className="meal-row"><div className={`meal-image ${meal.color}`} aria-hidden="true"/><div className="meal-info"><strong>{meal.name}</strong><span>{meal.time}</span></div><b>{n(meal.calories)}</b></article>; }
+function BottomNav({ page, setPage, capture }) { return <nav className="bottom-nav"><button className={page === "home" ? "active" : ""} onClick={() => setPage("home")}>Home</button><button className="add-meal" aria-label="Add a meal" onClick={capture}><Plus size={28} strokeWidth={4}/></button><button className={page === "history" ? "active" : ""} onClick={() => setPage("history")}>History</button></nav>; }
 
-  return (
-    <div className="App">
-      <h1>create-liff-app</h1>
-      {message && <p>{message}</p>}
-      {error && (
-        <p>
-          <code>{error}</code>
-        </p>
-      )}
-      <a
-        href="https://developers.line.biz/ja/docs/liff/"
-        target="_blank"
-        rel="noreferrer"
-      >
-        LIFF Documentation
-      </a>
-    </div>
-  );
+function Onboarding({ step, setStep, profile, saveProfile, finish }) {
+  const [goal, setGoal] = useState(goals[0][2]); const [activity, setActivity] = useState(activities[0][2]); const [saving, setSaving] = useState(false); const options = step === 0 ? goals : activities; const selected = step === 0 ? goal : activity;
+  const next = async () => { if (step < 2) return setStep(step + 1); setSaving(true); try { await saveProfile({ goal, activityLevel: activity }); finish(); } finally { setSaving(false); } };
+  if (step === 2) return <section className="screen onboarding"><div className="steps"><i className="done"/><i className="done"/><i className="done"/></div><p className="eyebrow">STEP 3 OF 3</p><h1>Your daily target is ready</h1><p className="subtitle">Your target is calculated and stored securely in your profile.</p><div className="target-card"><span>DAILY CALORIE TARGET</span><strong>{n(profile?.dailyCalorieTarget ?? profile?.daily_calorie_target)}<em>kcal</em></strong></div><div className="target-macros"><Macro value={profile?.proteinTargetG ?? profile?.protein_target_g} label="Protein" tone="orange"/><Macro value={profile?.carbsTargetG ?? profile?.carbs_target_g} label="Carbs" tone="green"/><Macro value={profile?.fatTargetG ?? profile?.fat_target_g} label="Fat" tone="purple"/></div><button className="primary bottom-cta" disabled={saving} onClick={next}>{saving ? "Saving…" : "Start Tracking"}</button></section>;
+  return <section className="screen onboarding"><div className="steps"><i className="done"/><i className={step > 0 ? "done" : ""}/><i/></div><p className="eyebrow">STEP {step + 1} OF 3</p><h1>{step === 0 ? "What's your goal?" : "How active are you?"}</h1><p className="subtitle">{step === 0 ? "We'll tailor your daily calorie target to your goal." : "This helps us calculate your daily energy needs."}</p><div className="choice-list">{options.map(([title, description, value]) => <button key={value} className={selected === value ? "selected" : ""} onClick={() => step === 0 ? setGoal(value) : setActivity(value)}><strong>{title}</strong><span>{description}</span>{selected === value && <Check size={19}/>}</button>)}</div><button className="primary bottom-cta" onClick={next}>Continue</button></section>;
 }
 
+function Home({ data, setPage, capture }) {
+  const totals = data?.totals ?? {}; const targets = data?.targets ?? {}; const meals = (data?.meals ?? []).map(toMeal); const target = targets.calories ?? targets.dailyCalorieTarget; const consumed = totals.calories; const remaining = target == null || consumed == null ? null : Math.max(target - consumed, 0); const ratio = target ? consumed / target * 100 : 0;
+  return <section className="screen home-screen"><header className="home-head"><div><p>{data?.dateLabel ?? "Today"}</p><h1>Good evening, {data?.profile?.displayName ?? data?.profile?.display_name ?? "there"}</h1><span className="streak"><b>{n(data?.streakDays ?? data?.streak_days)}-day</b> streak, keep it up!</span></div><div className="avatar">{(data?.profile?.displayName ?? data?.profile?.display_name ?? "?").slice(0, 1)}</div></header><section className="calorie-card"><div className="ring" style={{ "--p": `${ratio}%` }}><div><strong>{n(remaining)}</strong><span>KCAL LEFT</span></div></div><div className="consumed"><p>Consumed <b>{n(consumed)}</b></p><p>Target <b>{n(target)}</b></p><hr/><span>{data?.status ?? "No entries yet"}</span></div></section><div className="macro-grid"><Macro value={totals.proteinG ?? totals.protein_g} label="Protein" tone="orange" progress={targets.proteinG ? totals.proteinG / targets.proteinG * 100 : 0}/><Macro value={totals.carbsG ?? totals.carbs_g} label="Carbs" tone="green" progress={targets.carbsG ? totals.carbsG / targets.carbsG * 100 : 0}/><Macro value={totals.fatG ?? totals.fat_g} label="Fat" tone="purple" progress={targets.fatG ? totals.fatG / targets.fatG * 100 : 0}/></div><div className="nutrient-grid"><div><b>{n(totals.fiberG ?? totals.fiber_g, "g")}</b><span>Fiber</span></div><div><b>{n(totals.sugarG ?? totals.sugar_g, "g")}</b><span>Sugar</span></div><div><b>{n(totals.sodiumMg ?? totals.sodium_mg, "mg")}</b><span>Sodium</span></div></div><div className="section-title"><h2>Today's Meals</h2><span>{meals.length} item</span></div>{meals.length ? meals.map(meal => <MealRow key={meal.id} meal={meal}/>) : <p className="empty-state">No meals logged today.</p>}<BottomNav page="home" setPage={setPage} capture={capture}/></section>;
+}
+
+function Capture({ setPage, review, loading }) { const input = useRef(null); return <section className="screen capture-screen"><button className="round-icon" onClick={() => setPage("home")}><X/></button><span className="capture-label">Food Photo</span><button className="photo-area" disabled={loading} onClick={() => input.current?.click()}><ImagePlus size={42}/><strong>{loading ? "Analyzing your meal…" : "Tap to take a photo or drag in your food image"}</strong><u>or browse files</u></button><input ref={input} className="file-input" type="file" accept="image/*" capture="environment" onChange={review}/><div className="frame-tip">Center your food in the frame</div><button className="shutter" aria-label="Take food photo" onClick={() => input.current?.click()}><Camera size={31}/></button></section>; }
+function Confirm({ draft, setPage, save, saving }) { const [name, setName] = useState(draft?.foodName ?? draft?.food_name ?? ""); return <section className="screen confirm-screen"><div className="photo-preview"><button className="round-icon" onClick={() => setPage("capture")}><ArrowLeft/></button><div><ImagePlus size={42}/><b>Food photo</b><span>Ready for review</span></div></div><div className="confirm-content"><div className="editable"><textarea value={name} onChange={e => setName(e.target.value)} aria-label="Food name"/><Pencil size={18}/></div><p className="subtitle">AI-detected · you can edit it</p><div className="total-card"><span>TOTAL CALORIES</span><strong>{n(draft?.calories)}<em>kcal</em></strong></div><div className="confirm-grid"><Nutrient value={draft?.proteinG ?? draft?.protein_g} label="Protein" tone="orange"/><Nutrient value={draft?.carbsG ?? draft?.carbs_g} label="Carbs" tone="green"/><Nutrient value={draft?.fatG ?? draft?.fat_g} label="Fat" tone="purple"/><Nutrient value={draft?.fiberG ?? draft?.fiber_g} label="Fiber"/><Nutrient value={draft?.sugarG ?? draft?.sugar_g} label="Sugar"/><Nutrient value={draft?.sodiumMg ?? draft?.sodium_mg} label="Sodium"/></div><label className="note-label">NOTE (OPTIONAL)<input placeholder="e.g. lunch with coworkers"/></label><div className="actions"><button className="secondary" onClick={() => setPage("capture")}>Retake</button><button className="primary" disabled={saving} onClick={() => save({ ...draft, foodName: name })}>{saving ? "Saving…" : "Save to Log"}</button></div></div></section>; }
+function History({ data, setPage, capture }) { const days = data?.days ?? []; return <section className="screen history-screen"><h1>History</h1>{days.length ? days.map(day => <section className="day" key={day.date}><div className="day-head"><span>{day.label ?? day.date}</span><b>{n(day.totalCalories ?? day.total_calories)} kcal</b></div>{day.meals.map(meal => <MealRow key={meal.id} meal={toMeal(meal)}/>)}</section>) : <p className="empty-state">No meal history yet.</p>}<BottomNav page="history" setPage={setPage} capture={capture}/></section>; }
+
+function App() {
+  const [page, setPage] = useState("loading"), [step, setStep] = useState(0), [profile, setProfile] = useState(null), [dashboard, setDashboard] = useState(null), [history, setHistory] = useState(null), [draft, setDraft] = useState(null), [captureLoading, setCaptureLoading] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState("");
+  const loadData = async () => { const [dashboardData, historyData] = await Promise.all([api.dashboard(), api.history()]); setDashboard(dashboardData); setHistory(historyData); };
+  useEffect(() => { api.bootstrap().then(async result => { setProfile(result.profile); const complete = result.onboardingCompleted ?? result.onboarding_completed; if (complete) await loadData(); setPage(complete ? "home" : "onboarding"); }).catch(e => { setError(e.message); setPage("error"); }); }, []);
+  const review = async e => { const file = e.target.files?.[0]; if (!file) return; setCaptureLoading(true); try { setDraft(await api.analyzeMeal(file)); setPage("confirm"); } catch (err) { setError(err.message); } finally { setCaptureLoading(false); } };
+  const save = async meal => { setSaving(true); try { await api.saveMeal(meal); await loadData(); setPage("home"); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+  const saveProfile = async values => { const result = await api.completeOnboarding(values); setProfile(result.profile); await loadData(); };
+  if (page === "loading") return <main className="app-shell"><section className="screen status-screen">Loading your nutrition tracker…</section></main>;
+  if (page === "error") return <main className="app-shell"><section className="screen status-screen"><h1>Unable to load your data</h1><p>{error}</p></section></main>;
+  return <main className="app-shell">{page === "onboarding" && <Onboarding step={step} setStep={setStep} profile={profile} saveProfile={saveProfile} finish={() => setPage("home")}/>} {page === "home" && <Home data={dashboard} setPage={setPage} capture={() => setPage("capture")}/>} {page === "capture" && <Capture setPage={setPage} review={review} loading={captureLoading}/>} {page === "confirm" && <Confirm draft={draft} setPage={setPage} save={save} saving={saving}/>} {page === "history" && <History data={history} setPage={setPage} capture={() => setPage("capture")}/>} {error && <div className="toast">{error}</div>}</main>;
+}
 export default App;
