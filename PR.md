@@ -59,7 +59,7 @@ Supabase-provided server secrets are used internally for database access. Do not
 
 ## Current known gaps
 
-1. **Onboarding is incomplete.** The backend correctly requires `birthdate`, `sex`, `heightCm`, `weightKg`, `goal`, and `activityLevel` in order to calculate BMR/TDEE and macro targets. The UI currently collects only goal and activity. Add an “About you” step before enabling real onboarding.
+1. **Onboarding now has an “About you” step.** It collects `birthdate`, `sex`, `heightCm`, and `weightKg` alongside goal/activity before submitting the complete target-calculation payload. Verify it in a real LIFF session after deployment.
 2. **No browser/device end-to-end test has been completed.** The available browser automation binary was missing. `yarn build` passes, but verify inside the actual LINE webview after the onboarding change.
 3. **Meal photo handling.** `meal-analyze` currently sends the selected image directly to OpenAI and returns a draft. It does not yet upload the original image to `food-photos`; add storage upload and a signed URL only if product requirements need photo retention.
 4. **Missing settings, Insights UI, edit/delete meal API/UI, and scheduled weekly insight job.** These are described in the backend plan but not implemented.
