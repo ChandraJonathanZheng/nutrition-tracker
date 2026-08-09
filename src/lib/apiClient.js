@@ -1,4 +1,5 @@
 import liff from "@line/liff";
+import heic2any from "heic2any";
 
 const functionsUrl = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL;
 
@@ -29,11 +30,20 @@ async function request(path, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+async function normalizeFoodPhoto(file) {
+  const isHeic = file.type === "image/heic" || file.type === "image/heif" || /\.hei[cf]$/i.test(file.name);
+  if (!isHeic) return file;
+
+  const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 });
+  const jpeg = Array.isArray(converted) ? converted[0] : converted;
+  return new File([jpeg], `${file.name.replace(/\.hei[cf]$/i, "") || "food"}.jpg`, { type: "image/jpeg" });
+}
+
 export const api = {
   bootstrap: () => request("profile/bootstrap", { method: "POST" }),
   dashboard: () => request("dashboard/today"),
   history: () => request("meals/history?limit=30"),
-  analyzeMeal: (file) => { const body = new FormData(); body.append("photo", file); return request("meal-analyze", { method: "POST", body }); },
+  analyzeMeal: async (file) => { const body = new FormData(); body.append("photo", await normalizeFoodPhoto(file)); return request("meal-analyze", { method: "POST", body }); },
   saveMeal: (draft) => request("meals", { method: "POST", body: JSON.stringify(draft) }),
   completeOnboarding: (profile) => request("profile/onboarding", { method: "POST", body: JSON.stringify(profile) }),
 };
